@@ -1,0 +1,5 @@
+{
+  "name": "AI Muscle Memo",
+  "description": "A mobile-first workout tracker powered by Gemini AI for real-time feedback and analysis.",
+  "requestFramePermissions": []
+}
