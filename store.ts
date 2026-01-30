@@ -7,9 +7,12 @@ interface WorkoutState {
   // Current active workout
   currentWorkout: WorkoutSession | null;
   isWorkoutActive: boolean;
-  
+
   // History
   history: WorkoutSession[];
+
+  // Custom exercises
+  customExercises: Exercise[];
 
   // Actions
   startWorkout: () => void;
@@ -22,6 +25,7 @@ interface WorkoutState {
   finishWorkout: (aiFeedback?: string) => void;
   cancelWorkout: () => void;
   deleteHistoryItem: (sessionId: string) => void;
+  addCustomExercise: (name: string, category: string) => void;
 }
 
 export const useWorkoutStore = create<WorkoutState>()(
@@ -30,6 +34,7 @@ export const useWorkoutStore = create<WorkoutState>()(
       currentWorkout: null,
       isWorkoutActive: false,
       history: [],
+      customExercises: [],
 
       startWorkout: () => {
         set({
@@ -204,6 +209,18 @@ export const useWorkoutStore = create<WorkoutState>()(
         const { history } = get();
         set({
           history: history.filter(h => h.id !== sessionId)
+        });
+      },
+
+      addCustomExercise: (name, category) => {
+        const { customExercises } = get();
+        const newExercise: Exercise = {
+          id: `custom_${uuidv4()}`,
+          name,
+          category: category as Exercise['category'],
+        };
+        set({
+          customExercises: [...customExercises, newExercise],
         });
       }
     }),
