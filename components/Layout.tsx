@@ -1,6 +1,6 @@
 import React, { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Dumbbell, History, Activity } from 'lucide-react';
+import { Calendar, List, Settings } from 'lucide-react';
 
 interface LayoutProps {
   children?: ReactNode;
@@ -22,36 +22,36 @@ export const Layout = ({ children }: LayoutProps) => {
             to="/"
             className={({ isActive }) =>
               `flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors ${
-                isActive ? 'text-electric' : 'text-slate-500 hover:text-slate-300'
+                isActive ? 'text-coral' : 'text-slate-500 hover:text-slate-300'
               }`
             }
           >
-            <Dumbbell size={24} />
-            <span className="text-xs font-medium">記録</span>
+            <Calendar size={24} />
+            <span className="text-xs font-medium">Calendar</span>
           </NavLink>
 
           <NavLink
-            to="/history"
+            to="/moves"
             className={({ isActive }) =>
               `flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors ${
-                isActive ? 'text-electric' : 'text-slate-500 hover:text-slate-300'
+                isActive ? 'text-coral' : 'text-slate-500 hover:text-slate-300'
               }`
             }
           >
-            <History size={24} />
-            <span className="text-xs font-medium">履歴</span>
+            <List size={24} />
+            <span className="text-xs font-medium">Moves</span>
           </NavLink>
 
           <NavLink
-            to="/stats"
+            to="/settings"
             className={({ isActive }) =>
               `flex flex-col items-center justify-center w-full h-full space-y-1 transition-colors ${
-                isActive ? 'text-electric' : 'text-slate-500 hover:text-slate-300'
+                isActive ? 'text-coral' : 'text-slate-500 hover:text-slate-300'
               }`
             }
           >
-            <Activity size={24} />
-            <span className="text-xs font-medium">統計</span>
+            <Settings size={24} />
+            <span className="text-xs font-medium">Setting</span>
           </NavLink>
         </div>
       </nav>

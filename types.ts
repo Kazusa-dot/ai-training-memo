@@ -29,4 +29,25 @@ export interface WorkoutSession {
 }
 
 // Navigation types
-export type Tab = 'record' | 'history' | 'stats';
+export type Tab = 'calendar' | 'moves' | 'settings';
+
+// Body part category for UI display
+export type BodyPartCategory = 'chest' | 'back' | 'legs' | 'shoulders' | 'arms' | 'core' | 'cardio';
+
+// Mapping from Japanese category names to color keys
+export const CATEGORY_COLOR_MAP: Record<string, BodyPartCategory> = {
+  '胸': 'chest',
+  'Chest': 'chest',
+  '背中': 'back',
+  'Back': 'back',
+  '脚': 'legs',
+  'Legs': 'legs',
+  '肩': 'shoulders',
+  'Shoulders': 'shoulders',
+  '腕': 'arms',
+  'Arms': 'arms',
+  '腹筋': 'core',
+  'Core': 'core',
+  '有酸素': 'cardio',
+  'その他': 'chest', // Default to chest for "other"
+};

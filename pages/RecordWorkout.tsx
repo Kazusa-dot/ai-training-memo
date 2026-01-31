@@ -1,11 +1,37 @@
 import React, { useState } from 'react';
 import { useWorkoutStore } from '../store';
 import { EXERCISE_LIST } from '../constants';
-import { Button } from '../components/ui/Button';
-import { Checkbox } from '../components/ui/Checkbox';
-import { Plus, Trash2, Save, BrainCircuit, X, Search, ChevronDown, Check, MoreVertical } from 'lucide-react';
+import { Plus, Minus, ChevronLeft, MoreHorizontal, X, Search, Check, BrainCircuit } from 'lucide-react';
 import { generateWorkoutFeedback } from '../services/geminiService';
 import { useNavigate } from 'react-router-dom';
+import { WorkoutExercise } from '../types';
+
+// Calculate volume for an exercise
+const calculateExerciseVolume = (exercise: WorkoutExercise): number => {
+  return exercise.sets.reduce((total, set) => total + (set.weight * set.reps), 0);
+};
+
+// Format volume with commas
+const formatVolume = (volume: number): string => {
+  return volume.toLocaleString();
+};
+
+// Get recent volumes for an exercise from history
+const getRecentVolumes = (exerciseName: string, history: any[]): number[] => {
+  const volumes: number[] = [];
+
+  // Get last 5 workouts that contain this exercise
+  for (const workout of history) {
+    const exercise = workout.exercises.find((e: WorkoutExercise) => e.name === exerciseName);
+    if (exercise) {
+      const vol = exercise.sets.reduce((sum: number, s: any) => sum + (s.weight * s.reps), 0);
+      volumes.push(vol);
+      if (volumes.length >= 5) break;
+    }
+  }
+
+  return volumes.reverse(); // Most recent last
+};
 
 export const RecordWorkout = () => {
   const store = useWorkoutStore();
@@ -19,15 +45,39 @@ export const RecordWorkout = () => {
   const [showAddCustom, setShowAddCustom] = useState(false);
   const [customName, setCustomName] = useState('');
   const [customCategory, setCustomCategory] = useState('その他');
+  const [selectedTab, setSelectedTab] = useState<string>('Chest');
 
   // Combine default and custom exercises
   const allExercises = [...EXERCISE_LIST, ...store.customExercises];
 
-  // Group exercises by category for the modal
-  const filteredExercises = allExercises.filter(ex =>
-    ex.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-  const categories = Array.from(new Set(filteredExercises.map(ex => ex.category)));
+  // Category tabs
+  const categoryTabs = [
+    { id: 'Chest', label: 'Chest', japanese: '胸' },
+    { id: 'Shoulders', label: 'Sho...', japanese: '肩' },
+    { id: 'Arms', label: 'Arm', japanese: '腕' },
+    { id: 'Back', label: 'Back', japanese: '背中' },
+    { id: 'Legs', label: 'Leg', japanese: '脚' },
+    { id: 'Core', label: 'Abs', japanese: '腹筋' },
+  ];
+
+  // Map Japanese categories to English for filtering
+  const categoryMap: Record<string, string> = {
+    '胸': 'Chest',
+    '肩': 'Shoulders',
+    '腕': 'Arms',
+    '背中': 'Back',
+    '脚': 'Legs',
+    '腹筋': 'Core',
+    'その他': 'Other',
+  };
+
+  // Filter exercises by search and category
+  const filteredExercises = allExercises.filter(ex => {
+    const matchesSearch = ex.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const exCategory = categoryMap[ex.category as string] || 'Other';
+    const matchesCategory = selectedTab === 'Other' ? true : exCategory === selectedTab;
+    return matchesSearch && matchesCategory;
+  });
 
   const categoryOptions = ['胸', '背中', '脚', '肩', '腕', 'その他'];
 
@@ -46,7 +96,6 @@ export const RecordWorkout = () => {
   const handleFinish = async () => {
     if (!store.currentWorkout) return;
 
-    // Check if there are exercises with sets
     if (store.currentWorkout.exercises.length === 0) {
       setAnalysisError('終了する前に少なくとも1つの種目を追加してください。');
       return;
@@ -56,16 +105,11 @@ export const RecordWorkout = () => {
     setAnalysisError(null);
 
     try {
-      // 1. Analyze with Gemini
       const feedback = await generateWorkoutFeedback(store.currentWorkout, store.history);
-
-      // 2. Save workout with feedback
       store.finishWorkout(feedback);
-
       setAnalysisResult(feedback);
     } catch (error) {
       console.error('Error finishing workout:', error);
-      // Still save the workout but without AI feedback
       store.finishWorkout('AI分析は利用できませんでした。');
       setAnalysisResult('ワークアウトを保存しました！現在AI分析は利用できません。');
     } finally {
@@ -75,26 +119,11 @@ export const RecordWorkout = () => {
 
   const closeAnalysis = () => {
     setAnalysisResult(null);
-    navigate('/history');
+    navigate('/');
   };
 
-  // Helper to find previous record
-  const getPreviousRecord = (exerciseName: string) => {
-    // Search history for this exercise
-    const prevWorkout = store.history.find(w =>
-      w.exercises.some(e => e.name === exerciseName)
-    );
-    if (!prevWorkout) return null;
-
-    const prevExercise = prevWorkout.exercises.find(e => e.name === exerciseName);
-    if (!prevExercise) return null;
-
-    // Simple summary: Max weight x sets
-    const maxWeight = Math.max(...prevExercise.sets.map(s => s.weight));
-    const totalSets = prevExercise.sets.length;
-    const totalVol = prevExercise.sets.reduce((sum, s) => sum + (s.weight * s.reps), 0);
-
-    return `${maxWeight}kg × ${totalSets}セット (Vol: ${totalVol}kg)`;
+  const handleBack = () => {
+    navigate('/');
   };
 
   // If no active workout, show start screen
@@ -102,8 +131,8 @@ export const RecordWorkout = () => {
     return (
       <div className="flex flex-col items-center justify-center h-[80vh] space-y-8 animate-in fade-in duration-500">
         <div className="relative">
-          <div className="absolute inset-0 bg-electric blur-[60px] opacity-10 rounded-full"></div>
-          <BrainCircuit size={80} className="text-electric relative z-10" />
+          <div className="absolute inset-0 bg-coral blur-[60px] opacity-20 rounded-full"></div>
+          <BrainCircuit size={80} className="text-coral relative z-10" />
         </div>
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold text-white tracking-tight">
@@ -112,15 +141,18 @@ export const RecordWorkout = () => {
           <p className="text-slate-400">素早く記録。AIと共に成長。</p>
         </div>
 
-        <div className="bg-surface border border-slate-800 p-6 rounded-2xl max-w-xs w-full text-center space-y-4 shadow-xl">
-           <div className="text-4xl">💡</div>
-           <div>
-             <h3 className="font-semibold text-white">トレーニングの準備はOK？</h3>
-             <p className="text-sm text-slate-400 mt-1">今日のセッションを記録しましょう。</p>
-           </div>
-           <Button size="lg" onClick={handleStartWorkout} className="w-full shadow-lg shadow-electric/20">
+        <div className="bg-cardBg border border-slate-800 p-6 rounded-2xl max-w-xs w-full text-center space-y-4 shadow-xl">
+          <div className="text-4xl">💡</div>
+          <div>
+            <h3 className="font-semibold text-white">トレーニングの準備はOK？</h3>
+            <p className="text-sm text-slate-400 mt-1">今日のセッションを記録しましょう。</p>
+          </div>
+          <button
+            onClick={handleStartWorkout}
+            className="w-full bg-coral text-white font-medium py-3 rounded-xl hover:bg-coral/90 transition-colors"
+          >
             ワークアウトを開始
-          </Button>
+          </button>
         </div>
       </div>
     );
@@ -128,227 +160,266 @@ export const RecordWorkout = () => {
 
   // Active workout view
   return (
-    <div className="space-y-6 pb-24 animate-in fade-in slide-in-from-bottom-4 duration-300">
+    <div className="space-y-4 pb-32 animate-in fade-in duration-300">
       {/* Header */}
-      <div className="flex justify-between items-center sticky top-0 bg-background/95 backdrop-blur-md py-4 z-40 border-b border-slate-800/50">
-        <div>
-          <h2 className="text-xl font-bold text-white">
-            {new Date().toLocaleDateString('ja-JP', { month: 'long', day: 'numeric', weekday: 'short' })}
-          </h2>
-        </div>
-        <Button variant="ghost" size="sm" onClick={store.cancelWorkout} className="text-slate-500 hover:text-error">
-          キャンセル
-        </Button>
+      <div className="flex justify-between items-center py-2">
+        <button onClick={handleBack} className="flex items-center text-coral font-medium">
+          <ChevronLeft size={24} />
+          <span>Back</span>
+        </button>
+        <h2 className="text-white font-bold">
+          {new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '年').replace(/年/, '年').slice(0, -1) + '日'}
+        </h2>
+        <button onClick={store.cancelWorkout} className="text-coral text-sm">
+          Cancel
+        </button>
       </div>
 
-      <div className="space-y-6">
-        {/* Empty state - show prominent add button when no exercises */}
-        {store.currentWorkout.exercises.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-12 space-y-6">
-            <div className="text-center space-y-2">
-              <div className="text-5xl mb-4">🏋️</div>
-              <h3 className="text-lg font-semibold text-white">さあ、始めましょう！</h3>
-              <p className="text-sm text-slate-400">最初の種目を追加して記録を開始しましょう。</p>
-            </div>
-            <Button
-              variant="primary"
-              size="lg"
-              className="shadow-lg shadow-electric/25"
-              onClick={() => setShowExerciseModal(true)}
-            >
-              <Plus size={20} className="mr-2" /> 種目を追加
-            </Button>
+      {/* Empty state */}
+      {store.currentWorkout.exercises.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 space-y-6">
+          <div className="text-center space-y-2">
+            <div className="text-5xl mb-4">🏋️</div>
+            <h3 className="text-lg font-semibold text-white">さあ、始めましょう！</h3>
+            <p className="text-sm text-slate-400">最初の種目を追加して記録を開始しましょう。</p>
           </div>
-        )}
+          <button
+            onClick={() => setShowExerciseModal(true)}
+            className="flex items-center gap-2 bg-coral text-white font-medium px-6 py-3 rounded-xl"
+          >
+            <Plus size={20} /> 種目を追加
+          </button>
+        </div>
+      )}
 
-        {store.currentWorkout.exercises.map((exercise) => {
-          const prevRecord = getPreviousRecord(exercise.name);
-          return (
-            <div key={exercise.id} className="bg-surface rounded-xl p-0 border border-slate-800 shadow-sm overflow-hidden">
-              {/* Card Header */}
-              <div className="p-4 flex justify-between items-start border-b border-slate-800/50 bg-surfaceHighlight/30">
-                <div>
-                  <h3 className="font-bold text-lg text-electric">{exercise.name}</h3>
-                  {prevRecord && (
-                     <p className="text-xs text-slate-500 mt-1 flex items-center">
-                       <span className="mr-1">📝</span> 前回: {prevRecord}
-                     </p>
-                  )}
-                </div>
-                <button
-                  onClick={() => store.removeExercise(exercise.id)}
-                  className="text-slate-600 hover:text-error p-1 rounded transition-colors"
-                >
-                  <MoreVertical size={18} />
-                </button>
-              </div>
+      {/* Exercise Cards */}
+      {store.currentWorkout.exercises.map((exercise) => {
+        const totalVolume = calculateExerciseVolume(exercise);
+        const recentVolumes = getRecentVolumes(exercise.name, store.history);
+        const maxRecentVolume = Math.max(...recentVolumes, totalVolume, 1);
 
-              {/* Sets Table */}
-              <div className="p-4 space-y-3">
-                {/* Table Header */}
-                <div className="grid grid-cols-12 gap-2 text-xs text-slate-500 font-semibold text-center mb-2">
-                  <div className="col-span-2">セット</div>
-                  <div className="col-span-4">kg</div>
-                  <div className="col-span-4">回数</div>
-                  <div className="col-span-2">✔</div>
-                </div>
+        return (
+          <div key={exercise.id} className="bg-cardBg rounded-xl overflow-hidden">
+            {/* Exercise Header */}
+            <div className="flex justify-between items-center p-4 border-b border-slate-800">
+              <h3 className="font-bold text-white text-lg">{exercise.name}</h3>
+              <button
+                onClick={() => store.removeExercise(exercise.id)}
+                className="text-slate-500 hover:text-white"
+              >
+                <MoreHorizontal size={20} />
+              </button>
+            </div>
 
-                {exercise.sets.map((set, index) => (
-                  <div key={set.id} className={`grid grid-cols-12 gap-2 items-center transition-opacity ${set.completed ? 'opacity-50' : 'opacity-100'}`}>
-                    {/* Set Number */}
-                    <div className="col-span-2 flex justify-center">
-                      <div className="w-6 h-6 rounded bg-slate-800/50 text-slate-400 flex items-center justify-center text-xs font-mono">
-                        {index + 1}
-                      </div>
-                    </div>
-
-                    {/* Weight Input */}
-                    <div className="col-span-4">
+            {/* Sets */}
+            <div className="p-4 space-y-3">
+              {exercise.sets.map((set, index) => (
+                <div key={set.id} className="flex items-center gap-3">
+                  <span className="text-slate-400 w-12 text-sm">{index + 1}set</span>
+                  <div className="flex-1 flex gap-2">
+                    <div className="flex-1 bg-surface rounded-lg px-3 py-2 flex items-center justify-center">
                       <input
                         type="number"
-                        value={set.weight}
+                        value={set.weight || ''}
                         onChange={(e) => {
                           const value = parseFloat(e.target.value);
-                          if (!isNaN(value) && value >= 0 && value <= 9999) {
+                          if (!isNaN(value) && value >= 0) {
                             store.updateSet(exercise.id, set.id, 'weight', value);
                           } else if (e.target.value === '') {
                             store.updateSet(exercise.id, set.id, 'weight', 0);
                           }
                         }}
-                        min="0"
-                        max="9999"
-                        step="0.5"
-                        className="w-full bg-surfaceHighlight border border-slate-700/50 rounded-lg py-3 text-center text-lg font-mono text-white focus:border-electric focus:ring-1 focus:ring-electric outline-none transition-all placeholder-slate-600"
+                        className="w-16 bg-transparent text-white text-center font-mono outline-none"
                         placeholder="0"
                       />
+                      <span className="text-slate-400 ml-1">kg</span>
                     </div>
-
-                    {/* Reps Input */}
-                    <div className="col-span-4">
+                    <div className="flex-1 bg-surface rounded-lg px-3 py-2 flex items-center justify-center">
                       <input
                         type="number"
-                        value={set.reps}
+                        value={set.reps || ''}
                         onChange={(e) => {
                           const value = parseInt(e.target.value, 10);
-                          if (!isNaN(value) && value >= 0 && value <= 999) {
+                          if (!isNaN(value) && value >= 0) {
                             store.updateSet(exercise.id, set.id, 'reps', value);
                           } else if (e.target.value === '') {
                             store.updateSet(exercise.id, set.id, 'reps', 0);
                           }
                         }}
-                        min="0"
-                        max="999"
-                        step="1"
-                        className="w-full bg-surfaceHighlight border border-slate-700/50 rounded-lg py-3 text-center text-lg font-mono text-white focus:border-electric focus:ring-1 focus:ring-electric outline-none transition-all placeholder-slate-600"
+                        className="w-12 bg-transparent text-white text-center font-mono outline-none"
                         placeholder="0"
                       />
-                    </div>
-
-                    {/* Checkbox */}
-                    <div className="col-span-2 flex justify-center">
-                       <Checkbox
-                        checked={set.completed}
-                        onChange={() => store.toggleSetComplete(exercise.id, set.id)}
-                       />
+                      <span className="text-slate-400 ml-1">times</span>
                     </div>
                   </div>
-                ))}
+                </div>
+              ))}
 
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full mt-2 text-electric hover:bg-electric/10 border border-dashed border-electric/30 h-10"
-                  onClick={() => store.addSet(exercise.id)}
-                >
-                  <Plus size={16} className="mr-2" /> セットを追加
-                </Button>
+              {/* Add/Remove Set Buttons */}
+              <div className="flex items-center justify-between pt-2">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => store.addSet(exercise.id)}
+                    className="text-coral hover:bg-coral/10 p-2 rounded-lg transition-colors"
+                  >
+                    <Plus size={20} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (exercise.sets.length > 1) {
+                        const lastSet = exercise.sets[exercise.sets.length - 1];
+                        store.removeSet(exercise.id, lastSet.id);
+                      }
+                    }}
+                    className="text-coral hover:bg-coral/10 p-2 rounded-lg transition-colors"
+                    disabled={exercise.sets.length <= 1}
+                  >
+                    <Minus size={20} />
+                  </button>
+                </div>
+                <span className="text-slate-400 text-sm">
+                  Total volume: {formatVolume(totalVolume)}kg
+                </span>
               </div>
             </div>
-          );
-        })}
 
-        <Button
-          variant="outline"
-          className="w-full h-14 border-dashed border-slate-700 text-slate-400 hover:text-white hover:border-slate-500 hover:bg-surfaceHighlight transition-all"
+            {/* Note Section */}
+            <div className="px-4 pb-4">
+              <div className="bg-surface rounded-lg p-3">
+                <span className="text-slate-500 text-sm">Note</span>
+              </div>
+            </div>
+
+            {/* Recent Training Volumes Chart */}
+            {recentVolumes.length > 0 && (
+              <div className="px-4 pb-4">
+                <div className="bg-surface rounded-lg p-4">
+                  <h4 className="text-white font-medium mb-3">Recent training volumes</h4>
+                  <div className="flex items-end gap-2 h-24">
+                    {[...recentVolumes, totalVolume].map((vol, idx) => {
+                      const height = Math.max((vol / maxRecentVolume) * 100, 10);
+                      const isCurrentSession = idx === recentVolumes.length;
+                      return (
+                        <div
+                          key={idx}
+                          className="flex-1 flex flex-col items-center gap-1"
+                        >
+                          <div
+                            className={`w-full rounded-t-sm ${isCurrentSession ? 'bg-coral' : 'bg-coral/60'}`}
+                            style={{ height: `${height}%` }}
+                          />
+                          <span className="text-slate-500 text-xs">{idx}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="text-right text-slate-400 text-xs mt-2">100</div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Add Menu Button */}
+      {store.currentWorkout.exercises.length > 0 && (
+        <button
           onClick={() => setShowExerciseModal(true)}
+          className="flex items-center gap-2 text-coral py-2"
         >
-          <Plus size={20} className="mr-2" /> 種目を追加
-        </Button>
-      </div>
+          <div className="w-8 h-8 bg-coral/20 rounded-lg flex items-center justify-center">
+            <Plus className="text-coral" size={20} />
+          </div>
+          <span className="font-medium">Add Menu</span>
+        </button>
+      )}
 
       {/* Error Message */}
       {analysisError && (
         <div className="fixed bottom-40 left-4 right-4 bg-error/20 border border-error rounded-lg p-3 text-center z-50 animate-in fade-in">
           <p className="text-error text-sm">{analysisError}</p>
-          <button
-            onClick={() => setAnalysisError(null)}
-            className="text-slate-400 text-xs mt-1 underline"
-          >
+          <button onClick={() => setAnalysisError(null)} className="text-slate-400 text-xs mt-1 underline">
             閉じる
           </button>
         </div>
       )}
 
-      {/* Footer Actions */}
-      <div className="fixed bottom-20 left-0 right-0 p-4 bg-gradient-to-t from-background via-background/95 to-transparent z-40">
-        <div className="max-w-md mx-auto flex flex-col gap-2">
-          {store.currentWorkout.exercises.length > 0 && (
-            <Button
-              variant="secondary"
-              className="w-full h-12 rounded-xl"
-              onClick={() => setShowExerciseModal(true)}
+      {/* Footer Action */}
+      {store.currentWorkout.exercises.length > 0 && (
+        <div className="fixed bottom-20 left-0 right-0 p-4 bg-gradient-to-t from-background via-background/95 to-transparent z-40">
+          <div className="max-w-md mx-auto">
+            <button
+              onClick={() => setShowFinishConfirm(true)}
+              disabled={isAnalyzing}
+              className="w-full bg-coral text-white font-bold py-4 rounded-xl hover:bg-coral/90 transition-colors disabled:opacity-50"
             >
-              <Plus size={20} className="mr-2" /> 種目を追加
-            </Button>
-          )}
-          <Button
-            variant="primary"
-            className="w-full h-12 shadow-lg shadow-electric/25 rounded-xl text-base font-bold"
-            onClick={() => setShowFinishConfirm(true)}
-            disabled={isAnalyzing}
-          >
-            {isAnalyzing ? (
-              <span className="flex items-center">
-                <BrainCircuit className="animate-pulse mr-2" /> 分析中...
-              </span>
-            ) : (
-               <span className="flex items-center justify-center">
-                <Check className="mr-2" strokeWidth={3} size={18} /> ワークアウトを終了
-              </span>
-            )}
-          </Button>
+              {isAnalyzing ? (
+                <span className="flex items-center justify-center">
+                  <BrainCircuit className="animate-pulse mr-2" /> 分析中...
+                </span>
+              ) : (
+                <span className="flex items-center justify-center">
+                  <Check className="mr-2" size={20} /> ワークアウトを終了
+                </span>
+              )}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Exercise Selection Modal */}
       {showExerciseModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center animate-in fade-in duration-200">
           <div className="bg-surface w-full max-w-md sm:rounded-2xl rounded-t-2xl max-h-[85vh] flex flex-col border-t sm:border border-slate-700 shadow-2xl">
+            {/* Modal Header */}
             <div className="p-4 border-b border-slate-800 flex justify-between items-center">
-              <h3 className="font-bold text-lg">種目を選択</h3>
-              <button onClick={() => setShowExerciseModal(false)} className="text-slate-400 hover:text-white bg-slate-800 rounded-full p-1">
+              <h3 className="font-bold text-lg text-white">種目を選択</h3>
+              <button
+                onClick={() => setShowExerciseModal(false)}
+                className="text-slate-400 hover:text-white bg-slate-800 rounded-full p-1"
+              >
                 <X size={20} />
               </button>
             </div>
 
-            <div className="p-4 space-y-3">
+            {/* Search */}
+            <div className="p-4 border-b border-slate-800">
               <div className="relative">
                 <Search className="absolute left-3 top-3.5 text-slate-500" size={18} />
                 <input
                   type="text"
                   placeholder="検索..."
-                  className="w-full bg-surfaceHighlight border border-slate-700 rounded-xl pl-10 pr-4 py-3 outline-none focus:border-electric transition-colors text-white"
+                  className="w-full bg-surfaceHighlight border border-slate-700 rounded-xl pl-10 pr-4 py-3 outline-none focus:border-coral transition-colors text-white"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   autoFocus
                 />
               </div>
+            </div>
 
-              {/* Custom exercise add section */}
+            {/* Category Tabs */}
+            <div className="flex gap-1 p-4 overflow-x-auto no-scrollbar">
+              {categoryTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setSelectedTab(tab.id)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                    selectedTab === tab.id
+                      ? 'bg-white text-black'
+                      : 'bg-surfaceHighlight text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Custom exercise add section */}
+            <div className="px-4">
               {!showAddCustom ? (
                 <button
                   onClick={() => setShowAddCustom(true)}
-                  className="w-full flex items-center justify-center gap-2 py-3 text-electric hover:bg-electric/10 rounded-xl border border-dashed border-electric/30 transition-colors"
+                  className="w-full flex items-center justify-center gap-2 py-3 text-coral hover:bg-coral/10 rounded-xl border border-dashed border-coral/30 transition-colors"
                 >
                   <Plus size={18} />
                   <span>新しい種目を追加</span>
@@ -358,7 +429,7 @@ export const RecordWorkout = () => {
                   <input
                     type="text"
                     placeholder="種目名を入力..."
-                    className="w-full bg-surface border border-slate-700 rounded-lg px-4 py-3 outline-none focus:border-electric transition-colors text-white"
+                    className="w-full bg-surface border border-slate-700 rounded-lg px-4 py-3 outline-none focus:border-coral transition-colors text-white"
                     value={customName}
                     onChange={(e) => setCustomName(e.target.value)}
                     autoFocus
@@ -366,65 +437,58 @@ export const RecordWorkout = () => {
                   <select
                     value={customCategory}
                     onChange={(e) => setCustomCategory(e.target.value)}
-                    className="w-full bg-surface border border-slate-700 rounded-lg px-4 py-3 outline-none focus:border-electric transition-colors text-white"
+                    className="w-full bg-surface border border-slate-700 rounded-lg px-4 py-3 outline-none focus:border-coral transition-colors text-white"
                   >
                     {categoryOptions.map(cat => (
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
                   </select>
                   <div className="flex gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="flex-1"
+                    <button
+                      className="flex-1 py-2 text-slate-400 hover:text-white transition-colors"
                       onClick={() => {
                         setShowAddCustom(false);
                         setCustomName('');
                       }}
                     >
                       キャンセル
-                    </Button>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      className="flex-1"
+                    </button>
+                    <button
+                      className="flex-1 py-2 bg-coral text-white rounded-lg disabled:opacity-50"
                       onClick={handleAddCustomExercise}
                       disabled={!customName.trim()}
                     >
                       追加
-                    </Button>
+                    </button>
                   </div>
                 </div>
               )}
             </div>
 
-            <div className="overflow-y-auto flex-1 p-0">
-              {categories.map(category => {
-                const categoryExercises = filteredExercises.filter(e => e.category === category);
-                if (categoryExercises.length === 0) return null;
-
-                return (
-                  <div key={category} className="mb-2">
-                    <div className="px-4 py-2 bg-surfaceHighlight/50 text-xs font-bold text-slate-400 uppercase tracking-wider sticky top-0 backdrop-blur-sm">
-                      {category}
-                    </div>
-                    {categoryExercises.map(ex => (
-                      <button
-                        key={ex.id}
-                        onClick={() => {
-                          store.addExercise(ex);
-                          setShowExerciseModal(false);
-                          setSearchTerm('');
-                        }}
-                        className="w-full text-left px-4 py-4 hover:bg-slate-800/50 border-b border-slate-800/50 flex justify-between items-center group active:bg-slate-800"
-                      >
-                        <span className="font-medium text-slate-200">{ex.name}</span>
-                        <Plus size={18} className="text-electric opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </button>
-                    ))}
-                  </div>
-                );
-              })}
+            {/* Exercise List */}
+            <div className="overflow-y-auto flex-1 p-4 pt-2">
+              {filteredExercises.length > 0 ? (
+                <div className="space-y-1">
+                  {filteredExercises.map(ex => (
+                    <button
+                      key={ex.id}
+                      onClick={() => {
+                        store.addExercise(ex);
+                        setShowExerciseModal(false);
+                        setSearchTerm('');
+                      }}
+                      className="w-full text-left py-3 px-2 hover:bg-slate-800/50 rounded-lg flex items-center border-b border-slate-800/50"
+                    >
+                      <div className="w-1 h-6 bg-coral rounded-full mr-3" />
+                      <span className="font-medium text-white">{ex.name}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-slate-500">
+                  該当する種目がありません
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -433,30 +497,28 @@ export const RecordWorkout = () => {
       {/* Finish Confirmation Modal */}
       {showFinishConfirm && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-surface w-full max-w-sm rounded-2xl border border-slate-700 shadow-2xl p-6 space-y-4">
+          <div className="bg-cardBg w-full max-w-sm rounded-2xl border border-slate-700 shadow-2xl p-6 space-y-4">
             <div className="text-center space-y-2">
               <div className="text-4xl mb-2">🏁</div>
               <h3 className="font-bold text-lg text-white">ワークアウトを終了しますか？</h3>
               <p className="text-sm text-slate-400">終了するとAIが今日のトレーニングを分析します。</p>
             </div>
             <div className="flex flex-col gap-2 pt-2">
-              <Button
-                variant="primary"
-                className="w-full h-12 rounded-xl"
+              <button
+                className="w-full bg-coral text-white font-medium py-3 rounded-xl hover:bg-coral/90 transition-colors"
                 onClick={() => {
                   setShowFinishConfirm(false);
                   handleFinish();
                 }}
               >
                 終了する
-              </Button>
-              <Button
-                variant="ghost"
-                className="w-full h-12 rounded-xl text-slate-400"
+              </button>
+              <button
+                className="w-full py-3 text-slate-400 hover:text-white transition-colors"
                 onClick={() => setShowFinishConfirm(false)}
               >
                 キャンセル
-              </Button>
+              </button>
             </div>
           </div>
         </div>
@@ -471,13 +533,12 @@ export const RecordWorkout = () => {
               <p className="text-slate-400">お疲れ様でした！フィードバックです。</p>
             </div>
 
-            <div className="relative overflow-hidden rounded-2xl p-6 border border-electric">
-              {/* Gradient Background */}
-              <div className="absolute inset-0 bg-gradient-to-br from-electric/20 to-secondary/10 z-0"></div>
+            <div className="relative overflow-hidden rounded-2xl p-6 border border-coral">
+              <div className="absolute inset-0 bg-gradient-to-br from-coral/20 to-transparent z-0"></div>
 
               <div className="relative z-10">
-                <div className="flex items-center space-x-3 text-electric mb-4">
-                  <div className="bg-electric/20 p-2 rounded-lg">
+                <div className="flex items-center space-x-3 text-coral mb-4">
+                  <div className="bg-coral/20 p-2 rounded-lg">
                     <BrainCircuit size={24} />
                   </div>
                   <h3 className="font-bold text-lg">AIパーソナルトレーナー</h3>
@@ -489,9 +550,12 @@ export const RecordWorkout = () => {
               </div>
             </div>
 
-            <Button size="lg" onClick={closeAnalysis} className="w-full shadow-lg shadow-electric/20">
+            <button
+              onClick={closeAnalysis}
+              className="w-full bg-coral text-white font-medium py-4 rounded-xl hover:bg-coral/90 transition-colors"
+            >
               ホームに戻る
-            </Button>
+            </button>
           </div>
         </div>
       )}
